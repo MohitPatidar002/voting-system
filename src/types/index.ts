@@ -31,6 +31,7 @@ export interface Poll {
   allowMultiple?: boolean;
   totalVotes: number;
   results?: Record<string, number>;
+  hasVoted?: boolean;
   createdAt: Date;
   createdBy: string;
 }
