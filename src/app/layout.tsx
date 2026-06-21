@@ -3,12 +3,23 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../components/providers";
 import { AuthProvider } from "../components/AuthProvider";
+import { ToastProvider } from "../components/Toaster";
+import { PushForegroundListener } from "../components/PushForegroundListener";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Gandhawad Village Voting System",
-  description: "Secure voting platform for Gandhawad Village Panchayat",
+  title: "Gandhawad Village Portal",
+  description: "Secure Gram Panchayat portal for Gandhawad Village",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Village OS", statusBarStyle: "default" },
+};
+
+export const viewport = {
+  themeColor: "#15803d",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({
@@ -27,7 +38,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            {children}
+            <ToastProvider>
+              {children}
+              <PushForegroundListener />
+            </ToastProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

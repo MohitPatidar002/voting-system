@@ -2,11 +2,13 @@
 
 import { useTranslation } from "../hooks/useTranslation";
 import { Navbar } from "../components/Navbar";
-import { ArrowRight, Vote, Bell, Users } from "lucide-react";
+import { ArrowRight, Vote, Bell, Users, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "../components/AuthProvider";
 
 export default function Home() {
   const { t } = useTranslation();
+  const { user, loading } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -27,12 +29,23 @@ export default function Home() {
           </p>
 
           <div className="pt-8 flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center gap-2 rounded-md text-base font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-8 py-3 shadow-lg hover:shadow-xl hover:-translate-y-1"
-            >
-              {t("login")} <ArrowRight className="w-5 h-5" />
-            </Link>
+            {loading ? (
+              <div className="h-12 w-32 bg-muted animate-pulse rounded-md"></div>
+            ) : user ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center gap-2 rounded-md text-base font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-8 py-3 shadow-lg hover:shadow-xl hover:-translate-y-1"
+              >
+                Go to Dashboard <LayoutDashboard className="w-5 h-5" />
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center gap-2 rounded-md text-base font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-8 py-3 shadow-lg hover:shadow-xl hover:-translate-y-1"
+              >
+                {t("login")} <ArrowRight className="w-5 h-5" />
+              </Link>
+            )}
           </div>
         </div>
 

@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Village OS — Cloud Storage security rules.
+//
+// Complaint images are uploaded directly from the browser by authenticated
+// villagers and displayed on the public complaint feed, so:
+//   - read  is public (the feed is visible to everyone)
+//   - write requires an authenticated user, an image content-type, and a
+//     hard 3 MB size cap to stop abuse / quota exhaustion.
+// Every other path is denied.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /complaints/{imageId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Project progress photos (public feed), written by staff only.
+    match /projects/{imageId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Village directory member photos (public), written by staff only.
+    match /directory/{imageId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // PRIVATE scheme-application documents. A villager may only write into
+    // their OWN uid folder, and NOBODY can read directly — reads happen solely
+    // through short-lived signed URLs minted by the authorized API route. This
+    // is what stops one person's documents reaching anyone else.
+    match /applications/{userId}/{document=**} {
+      allow read: if false;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

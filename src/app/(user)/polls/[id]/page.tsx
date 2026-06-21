@@ -105,7 +105,7 @@ export default function PollVotingPage({ params }: { params: Promise<{ id: strin
   const now = new Date();
   const start = new Date(poll.startDate);
   const end = new Date(poll.endDate);
-  const isClosed = poll.status !== "open" && (now < start || now > end);
+  const isClosed = poll.status !== "open" || now < start || now > end;
   
   // Calculate percentages for results (only shown if voted or closed)
   const totalVotes = poll.totalVotes || 0;

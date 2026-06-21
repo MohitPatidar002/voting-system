@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
 import { LanguageToggle } from "./LanguageToggle";
+import { NotificationBell } from "./NotificationBell";
 import { useTranslation } from "../hooks/useTranslation";
 import { Vote, LogOut } from "lucide-react";
 import { useAuth } from "./AuthProvider";
@@ -24,6 +25,7 @@ export function Navbar() {
         </div>
         
         <div className="flex items-center gap-2 md:gap-4">
+          <NotificationBell />
           <LanguageToggle />
           <ThemeToggle />
           {!loading && user ? (

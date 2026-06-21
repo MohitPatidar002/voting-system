@@ -1,52 +1,94 @@
 import { NextResponse } from "next/server";
-import { adminDb, adminAuth } from "../../../../lib/firebase/admin";
-import { Notice } from "../../../../types";
+import { adminDb } from "../../../../lib/firebase/admin";
+import { errorResponse } from "../../../../lib/auth";
+import { requireCapability } from "../../../../lib/permissions";
+import { cleanText } from "../../../../lib/validate";
+import { createBroadcast } from "../../../../lib/broadcast";
 
-async function verifyAdmin(request: Request) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    throw new Error("Unauthorized");
+const NOTICE_TYPES = ["meeting", "emergency", "update", "general"];
+
+export async function GET(request: Request) {
+  try {
+    await requireCapability(request, "notice:create");
+    const snapshot = await adminDb.collection("notices").orderBy("createdAt", "desc").limit(50).get();
+    const notices = snapshot.docs.map((doc) => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        title: d.title,
+        type: d.type,
+        isActive: d.isActive,
+        createdAt: d.createdAt?.toDate().toISOString() ?? null,
+      };
+    });
+    return NextResponse.json({ notices });
+  } catch (error) {
+    return errorResponse(error, "Notices Fetch Error");
   }
-  const token = authHeader.split("Bearer ")[1];
-  const decodedToken = await adminAuth.verifyIdToken(token);
-  
-  if (!decodedToken.phone_number) {
-    throw new Error("Forbidden: No phone number associated with token");
+}
+
+export async function PATCH(request: Request) {
+  try {
+    await requireCapability(request, "notice:create");
+    const body = await request.json();
+    if (typeof body.noticeId !== "string") {
+      return NextResponse.json({ error: "noticeId is required." }, { status: 400 });
+    }
+    const updates: Record<string, unknown> = {};
+    if (typeof body.isActive === "boolean") updates.isActive = body.isActive;
+    if (body.title !== undefined) updates.title = cleanText(body.title, "Title", { max: 200 });
+    if (body.content !== undefined) updates.content = cleanText(body.content, "Content", { max: 5000 });
+    await adminDb.collection("notices").doc(body.noticeId).update(updates);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return errorResponse(error, "Notice Update Error");
   }
-  const adminQuery = await adminDb.collection("admins").where("mobileNumber", "==", decodedToken.phone_number).get();
-  if (adminQuery.empty) {
-    throw new Error("Forbidden: Admin access required");
+}
+
+export async function DELETE(request: Request) {
+  try {
+    await requireCapability(request, "notice:create");
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
+    await adminDb.collection("notices").doc(id).delete();
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return errorResponse(error, "Notice Delete Error");
   }
-  return decodedToken;
 }
 
 export async function POST(request: Request) {
   try {
-    const adminToken = await verifyAdmin(request);
+    const admin = await requireCapability(request, "notice:create");
     const body = await request.json();
-    const { title, content, type } = body;
 
-    if (!title || !content || !type) {
-      return NextResponse.json({ error: "All fields are required." }, { status: 400 });
+    const title = cleanText(body.title, "Title", { max: 200 });
+    const content = cleanText(body.content, "Content", { max: 5000 });
+    if (!NOTICE_TYPES.includes(body.type)) {
+      return NextResponse.json({ error: "Invalid notice type." }, { status: 400 });
     }
 
-    const newNotice: Omit<Notice, 'id'> = {
+    const docRef = await adminDb.collection("notices").add({
       title,
       content,
-      type,
+      type: body.type,
       createdAt: new Date(),
-      createdBy: adminToken.uid,
+      createdBy: admin.uid,
       isActive: true,
-    };
+    });
 
-    const docRef = await adminDb.collection("notices").add(newNotice);
+    // Notify the village so nobody misses an announcement.
+    await createBroadcast({
+      title,
+      body: content.slice(0, 160),
+      type: body.type === "emergency" ? "general" : "notice",
+      link: "/notices",
+      createdBy: admin.uid,
+    });
+
     return NextResponse.json({ success: true, noticeId: docRef.id });
-
-  } catch (error: any) {
-    console.error("Notice Creation Error:", error);
-    if (error.message === "Unauthorized" || error.message.includes("Forbidden")) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error, "Notice Creation Error");
   }
 }

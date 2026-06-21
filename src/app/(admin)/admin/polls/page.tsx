@@ -2,325 +2,220 @@
 
 import { useState, useEffect } from "react";
 import { useTranslation } from "../../../../hooks/useTranslation";
-import { Loader2, Plus, Trash2, CalendarClock } from "lucide-react";
-import { auth } from "../../../../lib/firebase/config";
+import { Loader2, Plus, Trash2, CalendarClock, PlayCircle, StopCircle, Eye } from "lucide-react";
+import { authFetch } from "../../../../lib/clientApi";
 import Link from "next/link";
+
+interface Poll {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  totalVotes: number;
+}
 
 export default function AdminPolls() {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const [polls, setPolls] = useState<any[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
   const [fetchingPolls, setFetchingPolls] = useState(true);
   const [adminRole, setAdminRole] = useState<string>("admin");
-
-  const fetchRoleAndPolls = async () => {
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-
-      // Fetch Role
-      const roleRes = await fetch("/api/admin/me", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      if (roleRes.ok) {
-        const roleData = await roleRes.json();
-        setAdminRole(roleData.role);
-      }
-
-      // Fetch Polls
-      const pollsRes = await fetch("/api/admin/polls", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      if (pollsRes.ok) {
-        const pollsData = await pollsRes.json();
-        setPolls(pollsData.polls);
-      }
-    } catch (err) {
-      console.error("Failed to fetch data");
-    } finally {
-      setFetchingPolls(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRoleAndPolls();
-  }, []);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [actionId, setActionId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     startDate: "",
     endDate: "",
-    type: "multiple_choice",
     allowMultiple: false,
-    options: [{ id: "1", text: "Option 1" }, { id: "2", text: "Option 2" }]
+    options: [{ id: "1", text: "Option 1" }, { id: "2", text: "Option 2" }],
   });
 
-  const updateOption = (index: number, text: string) => {
-    const newOptions = [...formData.options];
-    newOptions[index].text = text;
-    setFormData({ ...formData, options: newOptions });
+  const load = async () => {
+    try {
+      const [roleRes, pollsRes] = await Promise.all([
+        authFetch("/api/admin/me"),
+        authFetch("/api/admin/polls"),
+      ]);
+      if (roleRes.ok) setAdminRole((await roleRes.json()).role);
+      if (pollsRes.ok) setPolls((await pollsRes.json()).polls || []);
+    } catch {
+      /* ignore */
+    } finally {
+      setFetchingPolls(false);
+    }
   };
 
+  useEffect(() => { load(); }, []);
+
+  const updateOption = (index: number, text: string) => {
+    const opts = [...formData.options];
+    opts[index].text = text;
+    setFormData({ ...formData, options: opts });
+  };
   const addOption = () => {
     if (formData.options.length >= 10) return;
-    setFormData({
-      ...formData,
-      options: [...formData.options, { id: Date.now().toString(), text: `Option ${formData.options.length + 1}` }]
-    });
+    setFormData({ ...formData, options: [...formData.options, { id: Date.now().toString(), text: `Option ${formData.options.length + 1}` }] });
   };
-
-  const removeOption = (index: number) => {
+  const removeOption = (i: number) => {
     if (formData.options.length <= 2) return;
-    const newOptions = [...formData.options];
-    newOptions.splice(index, 1);
-    setFormData({ ...formData, options: newOptions });
+    const opts = [...formData.options];
+    opts.splice(i, 1);
+    setFormData({ ...formData, options: opts });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCreate = async (e: { preventDefault(): void }) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    setSuccess("");
-
+    setCreating(true);
+    setCreateError("");
+    setCreateSuccess("");
     try {
       const start = new Date(formData.startDate);
       const end = new Date(formData.endDate);
-      
-      // Frontend Validation
-      if (end <= start) {
-        throw new Error("End date & time must be after the start date & time.");
-      }
-      
-      const durationMins = (end.getTime() - start.getTime()) / (1000 * 60);
-      if (durationMins < 30) {
-        throw new Error("Poll must be open for at least 30 minutes.");
-      }
-
-      // Check auth token
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error("Authentication error. Please login again.");
-
-      const res = await fetch("/api/admin/polls", {
+      if (end <= start) throw new Error("End must be after start.");
+      if ((end.getTime() - start.getTime()) / 60000 < 30) throw new Error("Poll must be open for at least 30 minutes.");
+      const res = await authFetch("/api/admin/polls", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          ...formData,
-          startDate: start.toISOString(),
-          endDate: end.toISOString()
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, type: "multiple_choice", startDate: start.toISOString(), endDate: end.toISOString() }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create poll");
-
-      setSuccess("Poll created successfully!");
-      fetchRoleAndPolls(); // Refresh the list
-      // Reset form (except type)
-      setFormData({
-        ...formData,
-        title: "",
-        description: "",
-        startDate: "",
-        endDate: "",
-        allowMultiple: false,
-      });
-
-    } catch (err: any) {
-      setError(err.message);
+      setCreateSuccess("Poll created as Draft. Click Publish to open it to villagers.");
+      setFormData({ title: "", description: "", startDate: "", endDate: "", allowMultiple: false, options: [{ id: "1", text: "Option 1" }, { id: "2", text: "Option 2" }] });
+      load();
+    } catch (err: unknown) {
+      setCreateError(err instanceof Error ? err.message : "Failed");
     } finally {
-      setLoading(false);
+      setCreating(false);
     }
+  };
+
+  const setStatus = async (poll: Poll, status: string) => {
+    setActionId(poll.id);
+    try {
+      await authFetch("/api/admin/polls", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pollId: poll.id, status }),
+      });
+      load();
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const deletePoll = async (poll: Poll) => {
+    if (!confirm(`Delete "${poll.title}"? This cannot be undone.`)) return;
+    setActionId(poll.id);
+    try {
+      await authFetch(`/api/admin/polls?id=${poll.id}`, { method: "DELETE" });
+      load();
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const inp = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  const statusBadge = (poll: Poll) => {
+    if (poll.status === "open") return <span className="px-2 py-0.5 bg-green-500/10 text-green-600 text-xs rounded-full font-bold">Live</span>;
+    if (poll.status === "closed") return <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-xs rounded-full font-bold">Closed</span>;
+    return <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-600 text-xs rounded-full font-bold">Draft</span>;
   };
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">{t("polls")} Management</h1>
-      </div>
+      <h1 className="text-2xl font-bold">{t("polls")} Management</h1>
 
+      {/* Create form */}
+      <form onSubmit={handleCreate} className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-border bg-muted/30">
+          <h2 className="font-bold flex items-center gap-2"><CalendarClock className="h-5 w-5 text-primary" /> Create New Poll</h2>
+          <p className="text-xs text-muted-foreground mt-1">Polls are saved as Draft first — publish when ready.</p>
+        </div>
+        <div className="p-5 space-y-4">
+          {createError && <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">{createError}</div>}
+          {createSuccess && <div className="p-3 bg-green-500/10 text-green-600 text-sm rounded-lg">{createSuccess}</div>}
+          <input required placeholder="Poll title *" className={inp} value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} maxLength={100} />
+          <textarea required placeholder="Description *" rows={2} className={`${inp} h-auto`} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} maxLength={500} />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="text-sm font-medium">Start<input required type="datetime-local" className={inp} value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} /></label>
+            <label className="text-sm font-medium">End<input required type="datetime-local" className={inp} value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} /></label>
+          </div>
+          <div className="space-y-2 p-4 border border-border rounded-lg bg-muted/30">
+            <p className="text-sm font-medium">Options</p>
+            {formData.options.map((opt, i) => (
+              <div key={opt.id} className="flex gap-2">
+                <input required placeholder={`Option ${i + 1}`} maxLength={50} className={inp} value={opt.text} onChange={(e) => updateOption(i, e.target.value)} />
+                <button type="button" onClick={() => removeOption(i)} disabled={formData.options.length <= 2} className="p-2 text-muted-foreground hover:text-destructive disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+              </div>
+            ))}
+            {formData.options.length < 10 && (
+              <button type="button" onClick={addOption} className="text-xs text-primary font-medium flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add option</button>
+            )}
+            <label className="flex items-center gap-2 text-sm pt-1">
+              <input type="checkbox" checked={formData.allowMultiple} onChange={(e) => setFormData({ ...formData, allowMultiple: e.target.checked })} />
+              Allow multiple selections
+            </label>
+          </div>
+          <button type="submit" disabled={creating} className="px-8 h-10 bg-primary text-primary-foreground rounded-md font-medium disabled:opacity-50 flex items-center gap-2">
+            {creating && <Loader2 className="h-4 w-4 animate-spin" />} Save as Draft
+          </button>
+        </div>
+      </form>
+
+      {/* Polls list */}
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-border bg-muted/30">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <CalendarClock className="h-5 w-5 text-primary" />
-            Create New Poll
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Configure specific time slots for voting (e.g. Jun 15, 12:00 PM to 02:00 PM).
-          </p>
+        <div className="p-5 border-b border-border bg-muted/30">
+          <h2 className="font-bold">All Polls</h2>
         </div>
-
-        <div className="p-6">
-          {error && <div className="mb-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-lg">{error}</div>}
-          {success && <div className="mb-6 p-4 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 rounded-lg">{success}</div>}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Poll Title <span className="text-destructive">*</span></label>
-                <input
-                  required
-                  type="text"
-                  maxLength={100}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g. Village Road Development Budget Approval"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Description <span className="text-destructive">*</span></label>
-                <textarea
-                  required
-                  maxLength={500}
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Details about the poll..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Start Date & Time <span className="text-destructive">*</span></label>
-                  <input
-                    required
-                    type="datetime-local"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">End Date & Time <span className="text-destructive">*</span></label>
-                  <input
-                    required
-                    type="datetime-local"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/30">
-                <label className="block text-sm font-medium">Custom Voting Options <span className="text-destructive">*</span></label>
-                  {formData.options.map((opt, index) => (
-                    <div key={opt.id} className="flex items-center gap-2">
-                      <input
-                        required
-                        type="text"
-                        maxLength={50}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        value={opt.text}
-                        onChange={(e) => updateOption(index, e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeOption(index)}
-                        disabled={formData.options.length <= 2}
-                        className="p-2 text-muted-foreground hover:text-destructive disabled:opacity-50"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </div>
-                  ))}
-                  {formData.options.length < 10 && (
-                    <button
-                      type="button"
-                      onClick={addOption}
-                      className="text-sm font-medium text-primary hover:text-primary/80 flex items-center gap-1"
-                    >
-                      <Plus className="h-4 w-4" /> Add Option
-                    </button>
-                  )}
-                  
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="allowMultiple"
-                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      checked={formData.allowMultiple}
-                      onChange={(e) => setFormData({ ...formData, allowMultiple: e.target.checked })}
-                    />
-                    <label htmlFor="allowMultiple" className="text-sm font-medium">
-                      Allow voters to select multiple options
-                    </label>
-                  </div>
-                </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full sm:w-auto px-8 h-10 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {loading ? "Creating..." : "Create Poll"}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="mt-12 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-border bg-muted/30">
-          <h2 className="text-xl font-bold">Previous Polls</h2>
-          <p className="text-sm text-muted-foreground mt-1">All polls created by admins.</p>
-        </div>
-        <div className="p-6">
+        <div className="divide-y divide-border">
           {fetchingPolls ? (
             <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : polls.length === 0 ? (
-            <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">No polls created yet.</div>
+            <div className="p-8 text-center text-muted-foreground text-sm">No polls yet.</div>
           ) : (
-            <div className="space-y-4">
-              {polls.map((poll) => {
-                const start = new Date(poll.startDate);
-                const end = new Date(poll.endDate);
-                const now = new Date();
-                let statusBadge = <span className="px-2 py-1 bg-yellow-500/10 text-yellow-500 text-xs rounded-full font-medium">Draft/Scheduled</span>;
-                
-                if (now >= start && now <= end) {
-                  statusBadge = <span className="px-2 py-1 bg-green-500/10 text-green-500 text-xs rounded-full font-medium">Active</span>;
-                } else if (now > end) {
-                  statusBadge = <span className="px-2 py-1 bg-red-500/10 text-red-500 text-xs rounded-full font-medium">Expired/Closed</span>;
-                }
-
-                return (
-                  <div key={poll.id} className="p-4 border border-border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="font-bold text-lg flex items-center gap-2">{poll.title} {statusBadge}</h3>
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{poll.description}</p>
-                      <div className="flex gap-4 mt-2 text-xs font-medium text-muted-foreground">
-                        <span>Start: {start.toLocaleString()}</span>
-                        <span>End: {end.toLocaleString()}</span>
-                      </div>
+            polls.map((poll) => {
+              const isActing = actionId === poll.id;
+              return (
+                <div key={poll.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold truncate">{poll.title}</span>
+                      {statusBadge(poll)}
                     </div>
-                    <div className="text-center sm:text-right shrink-0 flex flex-col items-end gap-3">
-                      <div>
-                        <div className="text-2xl font-bold">{poll.totalVotes || 0}</div>
-                        <div className="text-xs text-muted-foreground">Total Votes</div>
-                      </div>
-                      {adminRole === "superadmin" && (
-                        <Link 
-                          href={`/admin/polls/${poll.id}`}
-                          className="px-4 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium rounded-md transition-colors whitespace-nowrap"
-                        >
-                          View Detailed Votes
-                        </Link>
-                      )}
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(poll.startDate).toLocaleString("en-IN")} → {new Date(poll.endDate).toLocaleString("en-IN")} · {poll.totalVotes || 0} votes
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    {poll.status !== "open" && (
+                      <button onClick={() => setStatus(poll, "open")} disabled={isActing} title="Publish to villagers" className="flex items-center gap-1 px-3 h-8 bg-green-500/10 text-green-600 hover:bg-green-500/20 rounded-md text-xs font-bold disabled:opacity-50">
+                        {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />} Publish
+                      </button>
+                    )}
+                    {poll.status === "open" && (
+                      <button onClick={() => setStatus(poll, "closed")} disabled={isActing} title="Close voting" className="flex items-center gap-1 px-3 h-8 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 rounded-md text-xs font-bold disabled:opacity-50">
+                        {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <StopCircle className="h-3.5 w-3.5" />} Close
+                      </button>
+                    )}
+                    {adminRole === "superadmin" && (
+                      <Link href={`/admin/polls/${poll.id}`} className="flex items-center gap-1 px-3 h-8 bg-primary/10 text-primary hover:bg-primary/20 rounded-md text-xs font-bold">
+                        <Eye className="h-3.5 w-3.5" /> Votes
+                      </Link>
+                    )}
+                    <button onClick={() => deletePoll(poll)} disabled={isActing} className="p-2 text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>

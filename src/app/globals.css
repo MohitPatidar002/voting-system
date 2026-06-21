@@ -107,4 +107,53 @@
   body {
     @apply bg-background text-foreground;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Mobile-first helpers (villagers use phones only — Android/iPhone).
+   -------------------------------------------------------------------------- */
+
+/* Prevent iOS Safari from auto-zooming when a form field is focused. iOS zooms
+   whenever the control's font-size is below 16px, so force 16px on phones. */
+@media (max-width: 767.98px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Cleaner taps: no grey flash, allow vertical panning. */
+a,
+button,
+[role="button"],
+input,
+select,
+textarea,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Respect device safe areas (notches / home indicator). */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-area-pt {
+  padding-top: env(safe-area-inset-top);
+}
+/* Bottom padding that clears a 4rem bottom nav AND the home indicator. */
+.pb-bottom-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+/* Never let a stray wide element cause horizontal scrolling on phones. */
+@media (max-width: 767.98px) {
+  body {
+    overflow-x: hidden;
+  }
 }

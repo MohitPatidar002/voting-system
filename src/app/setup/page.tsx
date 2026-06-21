@@ -5,27 +5,32 @@ import { useRouter } from "next/navigation";
 
 export default function SetupPage() {
   const [mobileNumber, setMobileNumber] = useState("");
+  const [secret, setSecret] = useState("");
   const [status, setStatus] = useState("");
   const router = useRouter();
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("Registering...");
-    
+
     try {
       const res = await fetch("/api/setup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-setup-secret": secret,
+        },
         body: JSON.stringify({ mobileNumber }),
       });
-      
+
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setStatus("Success! You are now an Admin. Redirecting to login...");
+        setStatus("Success! You are now the Superadmin. Redirecting to login...");
         setTimeout(() => {
           router.push("/login");
         }, 2000);
       } else {
-        setStatus("Failed to register.");
+        setStatus(data.error || "Failed to register.");
       }
     } catch (err) {
       setStatus("An error occurred.");
@@ -37,10 +42,20 @@ export default function SetupPage() {
       <div className="w-full max-w-md p-8 bg-card rounded-2xl shadow-lg border border-border">
         <h1 className="text-2xl font-bold mb-4 text-center">Bootstrap First Admin</h1>
         <p className="text-sm text-muted-foreground mb-6 text-center">
-          Enter your 10-digit mobile number to register yourself as the Superadmin. (Please delete this page in production).
+          One-time bootstrap. Enter the setup secret and your 10-digit mobile
+          number to register the first Superadmin. This is disabled once a
+          Superadmin exists.
         </p>
-        
+
         <form onSubmit={handleSetup} className="space-y-4">
+          <input
+            type="password"
+            required
+            placeholder="Setup secret"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+          />
           <input
             type="text"
             required
