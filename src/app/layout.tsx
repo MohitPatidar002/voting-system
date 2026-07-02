@@ -9,10 +9,11 @@ import { PushForegroundListener } from "../components/PushForegroundListener";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Gandhawad Village Portal",
-  description: "Secure Gram Panchayat portal for Gandhawad Village",
+  title: "Gram Panchayat Gandhawad — Official Village Portal",
+  description:
+    "Official portal of Gram Panchayat Gandhawad, Madhya Pradesh: schemes, polls, complaints, budget transparency, development works and Gram Sabha records.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Village OS", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Gandhawad Portal", statusBarStyle: "default" },
 };
 
 export const viewport = {

@@ -15,6 +15,13 @@ export default function ComplaintsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // "My complaints" tab: the reporter's own submissions in every state
+  // (including under review / rejected, which the public feed never shows).
+  const [view, setView] = useState<"public" | "mine">("public");
+  const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
+  const [mineLoaded, setMineLoaded] = useState(false);
+  const [mineLoading, setMineLoading] = useState(false);
   
   // Form State
   const [title, setTitle] = useState("");
@@ -56,6 +63,32 @@ export default function ComplaintsPage() {
 
   const loadMore = () => {
     if (nextCursor) fetchComplaints(nextCursor);
+  };
+
+  const fetchMine = async (force = false) => {
+    if (mineLoaded && !force) return;
+    try {
+      setMineLoading(true);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch("/api/complaints/mine", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMyComplaints(data.complaints);
+        setMineLoaded(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setMineLoading(false);
+    }
+  };
+
+  const switchView = (v: "public" | "mine") => {
+    setView(v);
+    if (v === "mine") fetchMine();
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,7 +149,10 @@ export default function ComplaintsPage() {
       setDescription("");
       setImages([]);
 
-      // We don't fetchComplaints because new ones go into 'under_review'.
+      // New complaints go into 'under_review', so the public feed won't show
+      // them — land the reporter on their own list where it IS visible.
+      await fetchMine(true);
+      setView("mine");
     } catch (err: any) {
       setError(err.message || t("somethingWrong"));
     } finally {
@@ -129,6 +165,8 @@ export default function ComplaintsPage() {
       case 'resolved': return 'bg-green-500/10 text-green-600 border-green-500/20';
       case 'in_progress': return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
       case 'unresolvable': return 'bg-red-500/10 text-red-600 border-red-500/20';
+      case 'rejected': return 'bg-red-500/10 text-red-600 border-red-500/20';
+      case 'under_review': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20';
       default: return 'bg-orange-500/10 text-orange-600 border-orange-500/20';
     }
   };
@@ -139,6 +177,8 @@ export default function ComplaintsPage() {
       case 'in_progress': return t("statusInProgress");
       case 'unresolvable': return t("statusUnresolvable");
       case 'approved': return t("statusPending");
+      case 'under_review': return t("statusUnderReview");
+      case 'rejected': return t("statusRejected");
       default: return status;
     }
   };
@@ -236,11 +276,65 @@ export default function ComplaintsPage() {
           </div>
         </div>
 
-        {/* Right Side: Public Feed */}
+        {/* Right Side: Public Feed / My Complaints */}
         <div className="w-full md:w-2/3 space-y-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">{t("publicFeed")}</h2>
-          
-          {loading ? (
+          <div className="inline-flex rounded-xl border border-border bg-card p-1" role="tablist">
+            <button
+              role="tab"
+              aria-selected={view === "public"}
+              onClick={() => switchView("public")}
+              className={`px-4 h-9 rounded-lg text-sm font-medium transition-colors ${view === "public" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {t("publicFeed")}
+            </button>
+            <button
+              role="tab"
+              aria-selected={view === "mine"}
+              onClick={() => switchView("mine")}
+              className={`px-4 h-9 rounded-lg text-sm font-medium transition-colors ${view === "mine" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {t("myComplaints")}
+            </button>
+          </div>
+
+          {view === "mine" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">{t("myComplaintsNote")}</p>
+              {mineLoading ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : myComplaints.length === 0 ? (
+                <div className="p-8 text-center bg-card rounded-2xl border border-border shadow-sm">
+                  <p className="text-muted-foreground">{t("noMyComplaints")}</p>
+                </div>
+              ) : (
+                myComplaints.map((complaint) => (
+                  <div key={complaint.id} className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                    <div className="p-5">
+                      <div className="flex justify-between items-start mb-3 gap-2">
+                        <h3 className="font-bold text-lg">{complaint.title}</h3>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${getStatusColor(complaint.status)}`}>
+                          {getStatusText(complaint.status)}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground text-sm mb-3 whitespace-pre-wrap">{complaint.description}</p>
+                      <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                        <span>{t("complaintId")}: {complaint.id.slice(0, 8).toUpperCase()}</span>
+                        <span>{t("reportedOn")} {new Date(complaint.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    {complaint.adminResponse && (
+                      <div className="bg-muted/50 p-4 border-t border-border">
+                        <span className="text-xs font-bold text-primary block mb-1">{t("officialResponse")}</span>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{complaint.adminResponse}</p>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : loading ? (
             <div className="flex justify-center p-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>

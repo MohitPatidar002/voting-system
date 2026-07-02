@@ -17,18 +17,23 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
-    // Project progress photos (public feed), written by staff only.
+    // Project progress photos (public feed). Writes require the `role` custom
+    // claim (provisioned server-side for staff) — matching the superadmin-only
+    // project:manage capability — so villagers can't deface the public feed.
     match /projects/{imageId} {
       allow read: if true;
       allow write: if request.auth != null
+        && request.auth.token.role == 'superadmin'
         && request.resource.size < 3 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
-    // Village directory member photos (public), written by staff only.
+    // Village directory member photos (public). Same superadmin-claim gate as
+    // the directory:manage capability.
     match /directory/{imageId} {
       allow read: if true;
       allow write: if request.auth != null
+        && request.auth.token.role == 'superadmin'
         && request.resource.size < 3 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }

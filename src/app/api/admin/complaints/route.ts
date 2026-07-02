@@ -61,11 +61,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
     }
 
-    const adminResponse =
-      body.adminResponse === undefined || body.adminResponse === ""
-        ? ""
-        : cleanText(body.adminResponse, "Response", { min: 0, max: 5000 });
-
     const ref = adminDb.collection("complaints").doc(complaintId);
     const snap = await ref.get();
     if (!snap.exists) {
@@ -80,7 +75,16 @@ export async function PATCH(request: Request) {
       );
     }
 
-    await ref.update({ status, adminResponse, updatedAt: new Date() });
+    // Only touch the official response when the request actually carries one,
+    // so a bare status change never erases a previously posted response.
+    const updates: Record<string, unknown> = { status, updatedAt: new Date() };
+    if (body.adminResponse !== undefined) {
+      updates.adminResponse =
+        body.adminResponse === ""
+          ? ""
+          : cleanText(body.adminResponse, "Response", { min: 0, max: 5000 });
+    }
+    await ref.update(updates);
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, "Admin Complaints Update Error");

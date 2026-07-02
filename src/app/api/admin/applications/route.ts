@@ -64,15 +64,21 @@ export async function PATCH(request: Request) {
     ) {
       return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
     }
-    const reviewerNote = body.reviewerNote
-      ? cleanText(body.reviewerNote, "Note", { min: 0, max: 2000 })
-      : "";
+    const ref = adminDb.collection("applications").doc(applicationId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: "Application not found" }, { status: 404 });
+    }
 
-    await adminDb.collection("applications").doc(applicationId).update({
-      status,
-      reviewerNote,
-      updatedAt: new Date(),
-    });
+    // Only touch the reviewer note when the request actually carries one, so
+    // a bare status change never erases a previously written note.
+    const updates: Record<string, unknown> = { status, updatedAt: new Date() };
+    if (body.reviewerNote !== undefined) {
+      updates.reviewerNote = body.reviewerNote
+        ? cleanText(body.reviewerNote, "Note", { min: 0, max: 2000 })
+        : "";
+    }
+    await ref.update(updates);
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, "Admin Applications Update Error");

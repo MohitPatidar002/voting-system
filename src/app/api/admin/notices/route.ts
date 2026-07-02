@@ -38,6 +38,9 @@ export async function PATCH(request: Request) {
     if (typeof body.isActive === "boolean") updates.isActive = body.isActive;
     if (body.title !== undefined) updates.title = cleanText(body.title, "Title", { max: 200 });
     if (body.content !== undefined) updates.content = cleanText(body.content, "Content", { max: 5000 });
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
+    }
     await adminDb.collection("notices").doc(body.noticeId).update(updates);
     return NextResponse.json({ success: true });
   } catch (error) {

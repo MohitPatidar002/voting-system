@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "../../../../lib/firebase/admin";
 import { requireHousehold, errorResponse } from "../../../../lib/auth";
+import { serializePollForVillager } from "../../../../lib/pollSerializer";
 
 export async function GET(
   request: Request,
@@ -11,7 +12,8 @@ export async function GET(
     const { id } = await params;
 
     const docRef = await adminDb.collection("polls").doc(id).get();
-    if (!docRef.exists) {
+    // Unpublished drafts must be indistinguishable from missing polls.
+    if (!docRef.exists || !["open", "closed"].includes(docRef.data()!.status)) {
       return NextResponse.json({ error: "Poll not found" }, { status: 404 });
     }
 
@@ -30,13 +32,7 @@ export async function GET(
       else if (voteData.optionId) userVotes = [voteData.optionId];
     }
 
-    const poll = {
-      id: docRef.id,
-      ...data,
-      startDate: data.startDate?.toDate().toISOString(),
-      endDate: data.endDate?.toDate().toISOString(),
-      createdAt: data.createdAt?.toDate().toISOString(),
-    };
+    const poll = serializePollForVillager(docRef.id, data, hasVoted);
 
     return NextResponse.json({ poll, hasVoted, userVotes });
   } catch (error) {

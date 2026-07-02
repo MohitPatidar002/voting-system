@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth } from "../../../lib/firebase/config";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { useTranslation } from "../../../hooks/useTranslation";
@@ -17,7 +17,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const [role, setRole] = useState<string>("user");
   
   const setupRecaptcha = () => {
     if (window.recaptchaVerifier) {
@@ -57,7 +56,6 @@ export default function LoginPage() {
       const appVerifier = window.recaptchaVerifier;
       const result = await signInWithPhoneNumber(auth, formattedNumber, appVerifier);
       setConfirmationResult(result);
-      setRole(data.role);
       setStep("otp");
       
     } catch (err: any) {
@@ -77,15 +75,22 @@ export default function LoginPage() {
     setError("");
     
     try {
-      await confirmationResult.confirm(otp);
-      if (role === "admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/dashboard");
+      const cred = await confirmationResult.confirm(otp);
+      // Role is only revealed AFTER the OTP proves number ownership: ask the
+      // server who we are and route staff to the admin panel.
+      let isStaff = false;
+      try {
+        const token = await cred.user.getIdToken();
+        const meRes = await fetch("/api/admin/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        isStaff = meRes.ok;
+      } catch {
+        /* treat as villager */
       }
+      router.push(isStaff ? "/admin/dashboard" : "/dashboard");
     } catch (err) {
       setError(t("invalidOtp"));
-    } finally {
       setLoading(false);
     }
   };
@@ -129,6 +134,9 @@ export default function LoginPage() {
               >
                 {loading ? "..." : t("sendOtp")}
               </button>
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                {t("loginHelpText")}
+              </p>
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
@@ -150,6 +158,14 @@ export default function LoginPage() {
                 className="w-full h-10 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 disabled:opacity-50"
               >
                 {loading ? "..." : t("verifyOtp")}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => { setStep("phone"); setOtp(""); setError(""); }}
+                className="w-full h-10 text-sm font-medium text-muted-foreground hover:text-primary disabled:opacity-50"
+              >
+                ← {t("changeNumber")}
               </button>
             </form>
           )}

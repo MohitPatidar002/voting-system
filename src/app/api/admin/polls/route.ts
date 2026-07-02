@@ -78,29 +78,62 @@ export async function PATCH(request: Request) {
     if (typeof body.pollId !== "string") {
       return NextResponse.json({ error: "pollId is required." }, { status: 400 });
     }
+    const ref = adminDb.collection("polls").doc(body.pollId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return NextResponse.json({ error: "Poll not found." }, { status: 404 });
+    }
+    const current = doc.data()!;
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.status !== undefined) {
+    let announce = false;
+    if (body.status !== undefined && body.status !== current.status) {
       if (!POLL_STATUSES.includes(body.status)) {
         return NextResponse.json({ error: "Invalid status." }, { status: 400 });
       }
+      // A poll's life moves one way: draft → open → closed. Reopening a closed
+      // poll or un-publishing an open one would let results be manipulated
+      // after villagers voted, so those transitions are refused.
+      const allowedNext: Record<string, string[]> = {
+        draft: ["open"],
+        open: ["closed"],
+        closed: [],
+      };
+      if (!(allowedNext[current.status] || []).includes(body.status)) {
+        return NextResponse.json(
+          { error: `A ${current.status} poll cannot become ${body.status}.` },
+          { status: 409 }
+        );
+      }
       updates.status = body.status;
       if (body.status === "open") {
-        const doc = await adminDb.collection("polls").doc(body.pollId).get();
-        if (doc.exists) {
-          const d = doc.data()!;
-          await createBroadcast({
-            title: `New poll: ${d.title}`,
-            body: String(d.description || "A new poll is open for voting.").slice(0, 160),
-            type: "poll",
-            link: `/polls/${body.pollId}`,
-            createdBy: admin.uid,
-          });
-        }
+        updates.publishedAt = new Date();
+        announce = true;
       }
     }
-    if (body.title !== undefined) updates.title = cleanText(body.title, "Title", { max: 200 });
-    if (body.description !== undefined) updates.description = cleanText(body.description, "Description", { max: 2000 });
-    await adminDb.collection("polls").doc(body.pollId).update(updates);
+    // Question and wording are frozen once villagers can see the poll —
+    // editing a live ballot would invalidate votes already cast.
+    if (body.title !== undefined || body.description !== undefined) {
+      if (current.status !== "draft") {
+        return NextResponse.json(
+          { error: "Only draft polls can be edited." },
+          { status: 409 }
+        );
+      }
+      if (body.title !== undefined) updates.title = cleanText(body.title, "Title", { max: 200 });
+      if (body.description !== undefined) updates.description = cleanText(body.description, "Description", { max: 2000 });
+    }
+    await ref.update(updates);
+
+    if (announce) {
+      await createBroadcast({
+        title: `New poll: ${current.title}`,
+        body: String(current.description || "A new poll is open for voting.").slice(0, 160),
+        type: "poll",
+        link: `/polls/${body.pollId}`,
+        createdBy: admin.uid,
+      });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, "Poll Update Error");
@@ -113,7 +146,22 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
-    await adminDb.collection("polls").doc(id).delete();
+
+    const ref = adminDb.collection("polls").doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return NextResponse.json({ error: "Poll not found." }, { status: 404 });
+    }
+    // Published polls are part of the village's voting record. Only drafts
+    // (which villagers never saw and cannot have voted on) may be deleted;
+    // finished polls are closed and kept, never erased.
+    if (doc.data()!.status !== "draft") {
+      return NextResponse.json(
+        { error: "Only draft polls can be deleted. Close the poll instead — published polls are kept as a permanent record." },
+        { status: 409 }
+      );
+    }
+    await ref.delete();
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, "Poll Delete Error");

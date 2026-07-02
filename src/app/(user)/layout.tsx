@@ -9,10 +9,16 @@ import { Navbar } from "../../components/Navbar";
 import { useState, useEffect } from "react";
 import { auth } from "../../lib/firebase/config";
 
+// Transparency records (budget, works, meeting minutes, directory) are public
+// by design — their APIs need no auth, so the pages must not demand login
+// either. Everything else in this segment stays behind UserGuard.
+const PUBLIC_PATHS = ["/budget", "/development", "/directory", "/meetings"];
+
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useTranslation();
   const [stats, setStats] = useState<any>({});
+  const isPublicPage = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -38,8 +44,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     { name: t("profile"), href: "/profile", icon: UserIcon },
   ];
 
-  return (
-    <UserGuard>
+  const content = (
       <div className="flex flex-col min-h-screen bg-muted/20 pb-bottom-nav md:pb-0">
         {/* Top Navbar */}
         <Navbar />
@@ -105,6 +110,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           })}
         </nav>
       </div>
-    </UserGuard>
   );
+
+  return isPublicPage ? content : <UserGuard>{content}</UserGuard>;
 }

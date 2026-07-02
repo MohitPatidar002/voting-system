@@ -42,7 +42,15 @@ export default function SchemesPage() {
       if (schemesRes.ok) setSchemes(schemesData.schemes || []);
       if (appsRes.ok) {
         const appsData = await appsRes.json();
-        setAppliedIds(new Set((appsData.applications || []).map((a: { schemeId: string }) => a.schemeId)));
+        // Rejected applications don't block the button — the API allows a
+        // fresh submission for those.
+        setAppliedIds(
+          new Set(
+            (appsData.applications || [])
+              .filter((a: { status: string }) => a.status !== "rejected")
+              .map((a: { schemeId: string }) => a.schemeId)
+          )
+        );
       }
     } catch (e) {
       console.error(e);

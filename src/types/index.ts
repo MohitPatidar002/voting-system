@@ -29,11 +29,13 @@ export interface Poll {
   type: 'yes_no' | 'multiple_choice';
   options: PollOption[];
   allowMultiple?: boolean;
-  totalVotes: number;
-  results?: Record<string, number>;
+  // null while the poll is open and the caller hasn't voted — the API hides
+  // live tallies so the running count can't influence votes.
+  totalVotes: number | null;
+  results?: Record<string, number> | null;
   hasVoted?: boolean;
   createdAt: Date;
-  createdBy: string;
+  createdBy?: string;
 }
 
 export interface Vote {

@@ -20,9 +20,12 @@ export async function GET(request: Request) {
       const data = doc.data();
       const start = data.startDate?.toDate();
       const end = data.endDate?.toDate();
-      if (start && end) {
-        if (now >= start && now <= end) activePolls++;
-        else if (now > end) closedPolls++;
+      // "Active" mirrors the vote route's votability rule: explicitly open AND
+      // inside the window. Drafts are neither active nor closed.
+      if (data.status === "open" && start && end && now >= start && now <= end) {
+        activePolls++;
+      } else if (data.status === "closed" || (data.status === "open" && end && now > end)) {
+        closedPolls++;
       }
     });
 

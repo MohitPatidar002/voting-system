@@ -45,7 +45,11 @@ export async function GET(request: Request) {
       stats.openComplaints = openQuery.data().count;
     }
 
-    return NextResponse.json(stats);
+    // Badge counts refresh every minute client-side; letting the browser
+    // reuse the response for 30s halves the Firestore reads at no UX cost.
+    return NextResponse.json(stats, {
+      headers: { "Cache-Control": "private, max-age=30" },
+    });
   } catch (error) {
     console.error("Stats Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

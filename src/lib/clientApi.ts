@@ -17,3 +17,17 @@ export async function authFetch(
     },
   });
 }
+
+/**
+ * Storage rules for staff-only folders (projects/, directory/) check the
+ * `role` custom claim on the ID token. The claim is provisioned server-side on
+ * the first authenticated API call, but the token cached in the browser can
+ * predate it — so before a direct-to-Storage staff upload we force a one-time
+ * token refresh to make sure the claim is present.
+ */
+let roleTokenRefreshed = false;
+export async function ensureFreshRoleToken(): Promise<void> {
+  if (roleTokenRefreshed || !auth.currentUser) return;
+  await auth.currentUser.getIdToken(true);
+  roleTokenRefreshed = true;
+}

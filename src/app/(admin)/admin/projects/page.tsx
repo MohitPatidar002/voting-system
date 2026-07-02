@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { authFetch } from "../../../../lib/clientApi";
+import { authFetch, ensureFreshRoleToken } from "../../../../lib/clientApi";
 import { auth, storage } from "../../../../lib/firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Loader2, HardHat, Plus, Trash2, Save } from "lucide-react";
@@ -59,6 +59,7 @@ export default function AdminProjectsPage() {
     try {
       const uid = auth.currentUser?.uid;
       const imageUrls: string[] = [];
+      if (images.length > 0) await ensureFreshRoleToken();
       for (const file of images) {
         const path = `projects/${uid}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
         await uploadBytes(ref(storage, path), file);

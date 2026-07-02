@@ -17,8 +17,12 @@ export async function POST(request: Request) {
       adminDb.collection("households").where("mobileNumber", "==", phoneNumber).limit(1).get(),
     ]);
 
+    // Deliberately role-blind: this endpoint answers ONLY "may this number
+    // receive an OTP?". Revealing which numbers are staff accounts to an
+    // unauthenticated caller would hand attackers a target list. The client
+    // decides where to land AFTER the OTP proves ownership of the number.
     if (!adminsSnapshot.empty) {
-      return NextResponse.json({ exists: true, role: "admin" });
+      return NextResponse.json({ exists: true });
     }
 
     if (!householdsSnapshot.empty) {
@@ -28,7 +32,7 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
-      return NextResponse.json({ exists: true, role: "user" });
+      return NextResponse.json({ exists: true });
     }
 
     return NextResponse.json({ error: "Number not registered" }, { status: 404 });

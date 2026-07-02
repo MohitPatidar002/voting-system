@@ -1,29 +1,30 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "../../../lib/firebase/admin";
 import { requireHousehold, errorResponse } from "../../../lib/auth";
+import { serializePollForVillager } from "../../../lib/pollSerializer";
+
+const PUBLIC_POLL_STATUSES = ["open", "closed"];
 
 export async function GET(request: Request) {
   try {
     const user = await requireHousehold(request);
 
+    // Villagers only ever see published polls — drafts stay admin-only.
     const [snapshot, votesSnapshot] = await Promise.all([
-      adminDb.collection("polls").orderBy("createdAt", "desc").get(),
+      adminDb
+        .collection("polls")
+        .where("status", "in", PUBLIC_POLL_STATUSES)
+        .orderBy("createdAt", "desc")
+        .limit(50)
+        .get(),
       adminDb.collection("votes").where("householdId", "==", user.householdId).get(),
     ]);
 
     const votedPollIds = new Set(votesSnapshot.docs.map((doc) => doc.data().pollId));
 
-    const polls = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        startDate: data.startDate?.toDate().toISOString(),
-        endDate: data.endDate?.toDate().toISOString(),
-        createdAt: data.createdAt?.toDate().toISOString(),
-        hasVoted: votedPollIds.has(doc.id),
-      };
-    });
+    const polls = snapshot.docs.map((doc) =>
+      serializePollForVillager(doc.id, doc.data(), votedPollIds.has(doc.id))
+    );
 
     return NextResponse.json({ polls, userName: user.householdName });
   } catch (error) {

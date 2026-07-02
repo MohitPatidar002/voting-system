@@ -194,7 +194,7 @@ export default function AdminPolls() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
-                    {poll.status !== "open" && (
+                    {poll.status === "draft" && (
                       <button onClick={() => setStatus(poll, "open")} disabled={isActing} title="Publish to villagers" className="flex items-center gap-1 px-3 h-8 bg-green-500/10 text-green-600 hover:bg-green-500/20 rounded-md text-xs font-bold disabled:opacity-50">
                         {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />} Publish
                       </button>
@@ -209,9 +209,11 @@ export default function AdminPolls() {
                         <Eye className="h-3.5 w-3.5" /> Votes
                       </Link>
                     )}
-                    <button onClick={() => deletePoll(poll)} disabled={isActing} className="p-2 text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {poll.status === "draft" && (
+                      <button onClick={() => deletePoll(poll)} disabled={isActing} title="Delete draft" className="p-2 text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

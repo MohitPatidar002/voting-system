@@ -57,11 +57,14 @@ export async function POST(
       );
     }
 
-    // One application per household per scheme (deterministic id = idempotent).
+    // One LIVE application per household per scheme (deterministic id). A
+    // rejected application may be replaced by a fresh submission — a family
+    // whose papers were incomplete once shouldn't be locked out forever.
     const appId = `${schemeId}_${user.householdId}`;
     const appRef = adminDb.collection("applications").doc(appId);
     const existing = await appRef.get();
-    if (existing.exists) {
+    const isResubmission = existing.exists && existing.data()?.status === "rejected";
+    if (existing.exists && !isResubmission) {
       return NextResponse.json(
         { error: "You have already applied to this scheme." },
         { status: 409 }
@@ -78,7 +81,10 @@ export async function POST(
       notes,
       documents,
       status: "submitted",
-      reviewerNote: "",
+      // Keep the previous decision visible to the reviewer on resubmission.
+      reviewerNote: isResubmission
+        ? `[Resubmitted] Previous note: ${existing.data()?.reviewerNote || "—"}`
+        : "",
       createdAt: now,
       updatedAt: now,
     });

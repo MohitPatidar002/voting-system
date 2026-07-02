@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { authFetch } from "../../../../lib/clientApi";
+import { authFetch, ensureFreshRoleToken } from "../../../../lib/clientApi";
 import { auth, storage } from "../../../../lib/firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Loader2, Contact, Plus, Trash2, Phone, Pencil, X, Check } from "lucide-react";
@@ -50,6 +50,7 @@ export default function AdminDirectoryPage() {
     try {
       let photoUrl = "";
       if (photo) {
+        await ensureFreshRoleToken();
         const uid = auth.currentUser?.uid;
         const path = `directory/${uid}_${Date.now()}_${photo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
         await uploadBytes(ref(storage, path), photo);
@@ -97,6 +98,7 @@ export default function AdminDirectoryPage() {
     try {
       let photoUrl = editForm.photoUrl;
       if (editPhoto) {
+        await ensureFreshRoleToken();
         const uid = auth.currentUser?.uid;
         const path = `directory/${uid}_${Date.now()}_${editPhoto.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
         await uploadBytes(ref(storage, path), editPhoto);
